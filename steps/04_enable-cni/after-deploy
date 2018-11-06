@@ -1,0 +1,17 @@
+#!/bin/bash
+
+set -eu
+
+. "$CONJURE_UP_SPELLSDIR/sdk/common.sh"
+
+case "$(getStepKey "cni-enabled")" in
+    true)
+        setResult "Cloud native integration enabled"
+        ;;
+    false)
+        setResult "Unable to enable native integration (see logs for details)"
+        ;;
+    *)
+        setResult "Cloud native integration not available"
+        ;;
+esac

@@ -1,0 +1,13 @@
+#!/bin/bash
+
+set -eux
+
+. "$CONJURE_UP_SPELLSDIR/sdk/common.sh"
+
+art_length=${#ARTIFACTORY_NAME}
+if [ $art_length -gt 14 ]; then
+    echo "$ARTIFACTORY_NAME length is $art_length. It should not exceed 14 characters"
+    exit 1;
+fi
+
+

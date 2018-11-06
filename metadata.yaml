@@ -1,0 +1,9 @@
+friendly-name: Canonical Distribution of Kubernetes
+version: 1
+bundle-name: canonical-kubernetes
+options-whitelist:
+  kubernetes-master:
+    - allow-privileged
+    - service-cidr: "10.3.0.0/16"
+  kubernetes-worker:
+    - allow-privileged

@@ -1,0 +1,69 @@
+#!/bin/bash
+
+set -e
+
+. "$CONJURE_UP_SPELLSDIR/sdk/common.sh"
+
+mkdir -p "$HOME/.kube"
+
+if [[ $(uname -s) = "Darwin" ]]; then
+    KUBE_DEST="/usr/local/bin"
+    KUBE_REPO=https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/darwin/amd64
+
+    curl -sLO "$KUBE_REPO/kubectl"
+    if ! file kubectl 2>&1 | grep -qi 'executable'; then
+        echo "Failed to download a valid kubectl binary from $KUBE_REPO/kubectl"
+        setResult "kubectl is not a valid binary"
+        exit 1
+    fi
+    chmod +x kubectl
+    mv kubectl "$KUBE_DEST/kubectl"
+else
+    KUBE_DEST="/snap/bin"
+
+    if [[ ! -e "$KUBE_DEST/kubectl" ]]; then
+        sudo snap install kubectl --classic
+    fi
+fi
+
+# copy down config file from cluster
+juju scp -m "$JUJU_CONTROLLER:$JUJU_MODEL" kubernetes-master/0:config "$HOME/.kube/config.conjure-up.$JUJU_MODEL"
+
+# change cluster, context, and name of user to model name
+"$(dirname "$0")/update_kube_config.py" "$HOME/.kube/config.conjure-up.$JUJU_MODEL" "$JUJU_MODEL"
+
+PREVCONFIG=""
+# clean up wrapper from any previously CDK clusters
+if [[ -e "$HOME/bin/kubectl" ]]; then
+    PREVCONFIG="$(grep -o 'KUBECONFIG=[^ ]*' "$HOME/bin/kubectl")"
+    rm "$HOME/bin/kubectl"
+fi
+
+# manage backup if existing config
+if [[ -e "$HOME/.kube/config" ]]; then
+    # make backup copy of old config
+    cp "$HOME/.kube/config" "$HOME/.kube/config.conjure-up.backup.$(date -Iseconds)"
+    # purge backups, keeping most recent 10
+    for old_backup in $(find "$HOME/.kube" -name 'config.conjure-up.backup.*' | sort | head -n-10); do
+        rm "$old_backup" || true  # ignore errors
+    done
+fi
+
+# merge with and replace any existing config
+KUBECONFIG="$HOME/.kube/config.conjure-up.$JUJU_MODEL:$PREVCONFIG:$HOME/.kube/config"
+export KUBECONFIG
+NEW_CONFIG="$("$KUBE_DEST/kubectl" config view --raw=true)"
+echo "$NEW_CONFIG" > "$HOME/.kube/config"
+
+# clean up the copy of cluster-only config
+rm "$HOME/.kube/config.conjure-up.$JUJU_MODEL"
+
+# set the current context to the new cluster so it's used by default
+$KUBE_DEST/kubectl config set current-context "$JUJU_MODEL"
+
+setResult "$(echo -e "The Kubernetes client utility (kubectl) is now available at: $KUBE_DEST/kubectl\n\
+\n\
+The current-context has been set to: $JUJU_MODEL")"
+
+setKey "kubectl.dest" "$KUBE_DEST/kubectl"
+exit 0
